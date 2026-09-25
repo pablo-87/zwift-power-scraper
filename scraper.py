@@ -111,13 +111,13 @@ class ZwiftPowerClient:
                     if zid == 1714370:  # Only save for first rider
                         with open("debug_received_html.html", "w", encoding="utf-8") as f:
                             f.write(res.text)
-                        logger.info(f"DEBUG: Saved HTML for ZID {zid} to debug_received_html.html")
-                        logger.info(f"DEBUG: HTML length: {len(res.text)} characters")
-                        logger.info(f"DEBUG: HTML preview (first 500 chars): {res.text[:500]}")
+                        logger.debug(f"DEBUG: Saved HTML for ZID {zid} to debug_received_html.html")
+                        logger.debug(f"DEBUG: HTML length: {len(res.text)} characters")
+                        logger.debug(f"DEBUG: HTML preview (first 500 chars): {res.text[:500]}")
                     
                     # Pass the raw HTML and ZID to our new parser
                     rider_info = self._parse_profile_html(res.text, zid)
-                    logger.info(f"DEBUG: Parsed profile for ZID {zid}: {rider_info}")
+                    logger.debug(f"DEBUG: Parsed profile for ZID {zid}: {rider_info}")
                     riders_data.append(rider_info)
                 else:
                     logger.warning(
@@ -157,8 +157,8 @@ class ZwiftPowerClient:
         if not table_map:
             logger.warning(f"No profile table data found for ZID {zid}")
         
-        logger.info(f"DEBUG: Found {len(table_map)} table rows for ZID {zid}")
-        logger.info(f"DEBUG: Table labels found: {list(table_map.keys())}")
+        logger.debug(f"DEBUG: Found {len(table_map)} table rows for ZID {zid}")
+        logger.debug(f"DEBUG: Table labels found: {list(table_map.keys())}")
 
         for label, td in table_map.items():
             if "category" in label:
@@ -381,6 +381,7 @@ def run_nightly_pipeline():
                 clean_line = line.strip()
                 if clean_line:
                     target_zids.append(int(clean_line))
+        logger.info(f"Successfully loaded {len(target_zids)} target ZIDs from zids.txt.")
     except FileNotFoundError:
         logger.error("zids.txt not found. Skipping run.")
         return
@@ -412,11 +413,11 @@ def run_nightly_pipeline():
             )
             exit(1)
 
-    logger.info("=== Extracting Profile Data ===")
+    logger.info(f"Extracting Profile Data for {len(target_zids)} riders...")
     raw_profiles = client.get_profiles(target_zids)
-    logger.info(f"DEBUG: raw_profiles columns after scraping: {list(raw_profiles.columns)}")
-    logger.info(f"DEBUG: raw_profiles shape: {raw_profiles.shape}")
-    logger.info(f"DEBUG: raw_profiles.head():\n{raw_profiles.head()}")
+    logger.debug(f"DEBUG: raw_profiles columns after scraping: {list(raw_profiles.columns)}")
+    logger.debug(f"DEBUG: raw_profiles shape: {raw_profiles.shape}")
+    logger.debug(f"DEBUG: raw_profiles.head():\n{raw_profiles.head()}")
 
     # Validate that we got meaningful profile data
     expected_cols = ['zid', 'cat', 'racing_score', 'zpoints', 'country', 'team', 'zftp', 'weight', 'age']
@@ -450,7 +451,7 @@ def run_nightly_pipeline():
             logger.error("Cookie refresh failed. Cannot proceed with incomplete profile data.")
             exit(1)
 
-    logger.info("=== Extracting Event Histories ===")
+    logger.info(f"Extracting Event Histories for {len(target_zids)} riders...")
     raw_events = client.get_event_histories(target_zids)
 
     # Process and clean profiles
@@ -463,19 +464,22 @@ def run_nightly_pipeline():
     df_profiles_clean = DataPipeline.clean_numeric_columns(
         raw_profiles, numeric_cols
     )
-    logger.info(f"DEBUG: df_profiles_clean columns after clean_numeric_columns: {list(df_profiles_clean.columns)}")
-    logger.info(f"DEBUG: df_profiles_clean shape: {df_profiles_clean.shape}")
+    logger.debug(f"DEBUG: df_profiles_clean columns after clean_numeric_columns: {list(df_profiles_clean.columns)}")
+    logger.debug(f"DEBUG: df_profiles_clean shape: {df_profiles_clean.shape}")
 
     # ADD TIMESTAMP COLUMN HERE
     # Creates a 'fetched_at' column with the current date and time
     df_profiles_clean["fetched_at"] = pd.Timestamp.now()
-    logger.info(f"DEBUG: df_profiles_clean columns after adding fetched_at: {list(df_profiles_clean.columns)}")
+    logger.debug(f"DEBUG: df_profiles_clean columns after adding fetched_at: {list(df_profiles_clean.columns)}")
+    logger.info(f"Profile extraction complete. Cleaned {len(df_profiles_clean)} records.")
 
     # Process and clean event histories
     df_events_unpacked = DataPipeline.unpack_list_columns(raw_events)
     df_events_clean = DataPipeline.format_event_dates(
         df_events_unpacked, date_column="event_date"
     )
+    
+    logger.info(f"Event extraction complete. Processed {len(df_events_clean)} total events.")
     
     # ==========================================
     # DATABASE EXPORT LOGIC
@@ -513,7 +517,7 @@ def run_nightly_pipeline():
                 method=psql_insert_do_nothing 
                 )
         
-        logger.info(f"Successfully stored event rows in chunks.")
+        logger.info(f"Successfully processed {total_inserted} event rows into PostgreSQL.")
     except Exception as e:
         logger.error(f"Database insertion failed. Details: {e}")
 
@@ -527,12 +531,12 @@ def run_nightly_pipeline():
         
         # Filter dataframe to only include columns that exist in the model
         valid_profile_cols = [col for col in profile_model_columns if col in df_profiles_clean.columns]
-        logger.info(f"DEBUG: profile_model_columns: {profile_model_columns}")
-        logger.info(f"DEBUG: valid_profile_cols: {valid_profile_cols}")
-        logger.info(f"DEBUG: df_profiles_clean.columns before filtering: {list(df_profiles_clean.columns)}")
+        logger.debug(f"DEBUG: profile_model_columns: {profile_model_columns}")
+        logger.debug(f"DEBUG: valid_profile_cols: {valid_profile_cols}")
+        logger.debug(f"DEBUG: df_profiles_clean.columns before filtering: {list(df_profiles_clean.columns)}")
         df_profiles_filtered = df_profiles_clean[valid_profile_cols]
-        logger.info(f"DEBUG: df_profiles_filtered columns after filtering: {list(df_profiles_filtered.columns)}")
-        logger.info(f"DEBUG: df_profiles_filtered shape: {df_profiles_filtered.shape}")
+        logger.debug(f"DEBUG: df_profiles_filtered columns after filtering: {list(df_profiles_filtered.columns)}")
+        logger.debug(f"DEBUG: df_profiles_filtered shape: {df_profiles_filtered.shape}")
         
         # Replace empty strings with NaN
         df_profiles_filtered = df_profiles_filtered.replace(r'^\s*$', np.nan, regex=True)
@@ -550,7 +554,8 @@ def run_nightly_pipeline():
             method=psql_insert_do_nothing
         )
         
-        logger.info(f"Successfully stored {len(df_profiles_filtered)} profile rows.")
+        logger.info(f"Successfully processed {len(df_profiles_filtered)} profile rows into PostgreSQL.")
+        logger.info("Nightly pipeline completed successfully.")
     except Exception as e:
         logger.error(f"Profile database insertion failed. Details: {e}")
         
