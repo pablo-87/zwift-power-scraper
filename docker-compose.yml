@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: zwift_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-zwift_racing}
+      POSTGRES_USER: ${DB_USER:-zwift_user}
+      POSTGRES_PASSWORD: ${DB_PASS:-changeme}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-zwift_user} -d ${DB_NAME:-zwift_racing}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zwift_network
+
+  # Zwift Racing Scraper Application
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zwift_scraper
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database connection
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-zwift_racing}
+      DB_USER: ${DB_USER:-zwift_user}
+      DB_PASS: ${DB_PASS:-changeme}
+      
+      # ZwiftPower authentication cookies
+      PHPBB3_SID: ${PHPBB3_SID}
+      PHPBB3_U: ${PHPBB3_U}
+      CLOUDFRONT_KEY_PAIR_ID: ${CLOUDFRONT_KEY_PAIR_ID}
+      CLOUDFRONT_POLICY: ${CLOUDFRONT_POLICY}
+      CLOUDFRONT_SIGNATURE: ${CLOUDFRONT_SIGNATURE}
+      
+      # Zwift credentials (for cookie refresh)
+      ZWIFT_USER: ${ZWIFT_USER}
+      ZWIFT_PASS: ${ZWIFT_PASS}
+    volumes:
+      # Mount .env file for cookie updates
+      - ./.env:/app/.env
+      # Mount output directory to persist CSV exports
+      - ./output:/app/output
+      # Mount zids.txt for easy updates without rebuilding
+      - ./zids.txt:/app/zids.txt:ro
+    networks:
+      - zwift_network
+    # Uncomment to run as a scheduled job instead of one-time execution
+    # command: sh -c "while true; do python all_in_one.py && sleep 3600; done"
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: zwift_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@zwift.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - zwift_network
+    profiles:
+      - tools  # Only start with: docker-compose --profile tools up
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  zwift_network:
+    driver: bridge

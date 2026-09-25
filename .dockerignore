@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment files (should be mounted or passed at runtime)
+.env
+.env.local
+.env.*.local
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+tests/
+requirements-dev.txt
+pytest.ini
+
+# Documentation
+*.md
+!README.md
+COOKIE_REFRESH_IMPROVEMENTS.md
+README_TESTS.md
+TEST_SUITE_SUMMARY.md
+
+# Output and debug files
+output/
+debug*.html
+debug*.png
+*.csv
+
+# Old/archived files
+old/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# OS
+.DS_Store
+Thumbs.db
