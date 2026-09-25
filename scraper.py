@@ -1,10 +1,11 @@
 from typing import Iterable
-import datetime
+import schedule
 import json
 import logging
 import os
 import re
 import time
+from logging.handlers import TimedRotatingFileHandler
 from bs4 import BeautifulSoup
 from curl_cffi import requests
 from dotenv import load_dotenv
@@ -18,10 +19,28 @@ from datetime import datetime
 import os
 
 # --- Logging Configuration ---
+# 1. Create the logs directory in your CasaOS mapped folder
+os.makedirs("logs", exist_ok=True)
+
+# 2. Set up a daily rotating file handler
+# This automatically cuts a new log file every midnight (ready for the 2:00 AM run)
+file_handler = TimedRotatingFileHandler(
+    filename="logs/pipeline.log",
+    when="midnight",
+    interval=1,
+    backupCount=30  # Automatically deletes logs older than 30 days to save server space
+)
+# Adds the date to the end of yesterday's file (e.g., pipeline.log.2026-09-24.txt)
+file_handler.suffix = "%Y-%m-%d.txt" 
+
+# 3. Apply handlers to both the file and the terminal
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler()],
+    handlers=[
+        file_handler,
+        logging.StreamHandler()
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -351,16 +370,20 @@ class DataPipeline:
 
 
 # --- Execution Entry Point ---
+def run_nightly_pipeline():
+    logger.info("Starting nightly Zwift data pipeline...")
 
-if __name__ == "__main__":
+    # 1. Read target_zids from the text file (reads fresh every night!)
     target_zids = []
-
-# Open the text file in read mode
-with open('zids.txt', 'r') as file:
-    for line in file:
-        clean_line = line.strip()
-        if clean_line:  # Skips any blank lines
-            target_zids.append(int(clean_line))
+    try:
+        with open('zids.txt', 'r') as file:
+            for line in file:
+                clean_line = line.strip()
+                if clean_line:
+                    target_zids.append(int(clean_line))
+    except FileNotFoundError:
+        logger.error("zids.txt not found. Skipping run.")
+        return
 
     # Initialize the database tables on startup
     init_db()
@@ -530,6 +553,20 @@ with open('zids.txt', 'r') as file:
         logger.info(f"Successfully stored {len(df_profiles_filtered)} profile rows.")
     except Exception as e:
         logger.error(f"Profile database insertion failed. Details: {e}")
+        
+# Schedule the job to run every day at 2:00 AM
+schedule.every().day.at("02:00").do(run_nightly_pipeline)
+
+if __name__ == "__main__":
+    logger.info("Pipeline scheduler started. Waiting for 2:00 AM...")
+    
+    # Optional: run once immediately on startup to test it
+    # run_nightly_pipeline() 
+    
+    # Keep the script alive and checking the time
+    while True:
+        schedule.run_pending()
+        time.sleep(60) # check every minute
         
 """     # Export to CSV
     timestamp_filename = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

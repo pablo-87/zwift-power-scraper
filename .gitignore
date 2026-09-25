@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 .env
+debug_received_html.html
+docker-compose.yml
+Dockerfile
