@@ -1,17 +1,5 @@
-import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, UniqueConstraint,BigInteger
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.dialects.postgresql import insert
-from dotenv import load_dotenv
-
-
-load_dotenv()
-
-# Build the connection string
-DB_URL = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASS')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
-
-engine = create_engine(DB_URL)
-Base = declarative_base()
+from sqlalchemy import Column, Integer, String, Float, DateTime,BigInteger, UniqueConstraint
+from .engine import Base
 
 class RiderProfile(Base):
     __tablename__ = 'rider_profiles'
@@ -130,33 +118,8 @@ class RiderEvent(Base):
     event_title = Column(String)
     f_t = Column(String)
     distance = Column(Float)
-    event_date = Column(String)
+    event_date = Column(DateTime)
     rt = Column(BigInteger)
     laps = Column(Integer)
     dur = Column(Integer)
     query_zid = Column(Integer)
-    
-
-
-def init_db():
-    """Creates the tables in the PostgreSQL database if they do not exist."""
-    Base.metadata.create_all(engine)
-
-
-def psql_insert_do_nothing(table, conn, keys, data_iter):
-    """
-    Custom Pandas insertion method. 
-    Uses PostgreSQL's native ON CONFLICT DO NOTHING to silently skip duplicates.
-    """
-    data = [dict(zip(keys, row)) for row in data_iter]
-    if not data:
-        return
-    
-    # Build a standard insert statement
-    stmt = insert(table.table).values(data)
-    
-    # Convert it to an upsert ignoring conflicts
-    on_conflict_stmt = stmt.on_conflict_do_nothing()
-    
-    conn.execute(on_conflict_stmt)
-    

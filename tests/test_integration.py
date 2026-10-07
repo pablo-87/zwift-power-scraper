@@ -13,8 +13,10 @@ import pytest
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
-from all_in_one import ZwiftPowerClient, DataPipeline, CookieExpiredError
-from database import Base, RiderProfile, RiderEvent, psql_insert_do_nothing
+from core.client import ZwiftPowerClient, CookieExpiredError
+from core.pipeline import DataPipeline
+from database.engine import Base, psql_insert_do_nothing
+from database.models import RiderProfile, RiderEvent
 
 
 # ============================================================================
@@ -24,8 +26,8 @@ from database import Base, RiderProfile, RiderEvent, psql_insert_do_nothing
 class TestFullPipeline:
     """Test suite for complete scraping and storage pipeline."""
 
-    @patch('all_in_one.requests.Session')
-    @patch('all_in_one.time.sleep')
+    @patch('core.client.requests.Session')
+    @patch('core.client.time.sleep')
     def test_profile_scraping_to_dataframe(
         self,
         mock_sleep: Mock,
@@ -62,8 +64,8 @@ class TestFullPipeline:
         assert "zid" in df_clean.columns
         assert pd.api.types.is_float_dtype(df_clean["weight"])
 
-    @patch('all_in_one.requests.Session')
-    @patch('all_in_one.time.sleep')
+    @patch('core.client.requests.Session')
+    @patch('core.client.time.sleep')
     def test_events_scraping_to_dataframe(
         self,
         mock_sleep: Mock,
@@ -98,10 +100,9 @@ class TestFullPipeline:
         # Validate results
         assert len(df_clean) == 2
         assert "query_zid" in df_clean.columns
-        assert isinstance(df_clean["event_date"].iloc[0], str)
-        assert "/" in df_clean["event_date"].iloc[0]
+        assert pd.api.types.is_datetime64_any_dtype(df_clean["event_date"])
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_profile_to_database_insertion(
         self,
         mock_session_class: Mock,
@@ -151,7 +152,7 @@ class TestFullPipeline:
         assert len(result_df) == 1
         assert result_df["zid"].iloc[0] == 1714370
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_events_to_database_insertion(
         self,
         mock_session_class: Mock,
@@ -338,7 +339,7 @@ class TestChunkedInsertion:
 class TestErrorHandling:
     """Test suite for error handling and recovery."""
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_partial_failure_continues_processing(
         self,
         mock_session_class: Mock,
@@ -370,7 +371,7 @@ class TestErrorHandling:
         assert len(result) == 3
         assert "zid" in result.columns
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_network_error_recovery(
         self,
         mock_session_class: Mock,
@@ -437,7 +438,7 @@ class TestErrorHandling:
                 "zid": 1714370,
                 "res_id": "5703166.23",
                 "name": "Test Rider",
-                "team": "",  # Empty string
+                "tname": "",  # Empty string (event team name)
                 "note": "   "  # Whitespace only
             }
         ]
@@ -457,7 +458,7 @@ class TestErrorHandling:
         
         # Verify NULL values in database
         result_df = pd.read_sql("SELECT * FROM rider_events", test_db_engine)
-        assert pd.isna(result_df["team"].iloc[0]) if "team" in result_df.columns else True
+        assert pd.isna(result_df["tname"].iloc[0]) if "tname" in result_df.columns else True
         assert pd.isna(result_df["note"].iloc[0]) if "note" in result_df.columns else True
 
 
@@ -468,9 +469,9 @@ class TestErrorHandling:
 class TestCookieRefreshIntegration:
     """Test suite for cookie refresh integration."""
 
-    @patch('all_in_one.requests.Session')
-    @patch('all_in_one.refresh_zwiftpower_cookies')
-    @patch('all_in_one.load_dotenv')
+    @patch('core.client.requests.Session')
+    @patch('scripts.cookie_refresher.refresh_zwiftpower_cookies')
+    @patch('dotenv.load_dotenv')
     def test_cookie_refresh_on_expiration(
         self,
         mock_load_dotenv: Mock,
@@ -514,8 +515,8 @@ class TestCookieRefreshIntegration:
         
         assert mock_refresh_cookies.called
 
-    @patch('all_in_one.requests.Session')
-    @patch('all_in_one.refresh_zwiftpower_cookies')
+    @patch('core.client.requests.Session')
+    @patch('scripts.cookie_refresher.refresh_zwiftpower_cookies')
     def test_cookie_refresh_failure_handling(
         self,
         mock_refresh_cookies: Mock,
@@ -555,7 +556,7 @@ class TestCookieRefreshIntegration:
 class TestDataConsistency:
     """Test suite for data consistency across pipeline."""
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_zid_consistency_across_pipeline(
         self,
         mock_session_class: Mock,
@@ -592,8 +593,9 @@ class TestDataConsistency:
         events = client.get_event_histories([target_zid])
         
         # Verify ZID consistency
-        assert profiles["zid"].iloc[0] == str(target_zid)
-        assert all(events["query_zid"] == target_zid)
+        assert profiles["zid"].iloc[0] == target_zid
+        # query_zid is stored as string by the client
+        assert all(events["query_zid"] == str(target_zid))
 
     def test_data_type_consistency(self, sample_events_df: pd.DataFrame) -> None:
         """Validates data types remain consistent through transformations.
@@ -607,7 +609,7 @@ class TestDataConsistency:
         
         # Verify data types
         assert df_formatted["zid"].dtype in [np.int64, np.int32]
-        assert isinstance(df_formatted["event_date"].iloc[0], str)
+        assert pd.api.types.is_datetime64_any_dtype(df_formatted["event_date"])
         assert df_formatted["pos"].dtype in [np.int64, np.int32]
 
     def test_no_data_loss_in_transformations(self) -> None:

@@ -14,7 +14,6 @@ services:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-zwift_user} -d ${DB_NAME:-zwift_racing}"]
       interval: 10s
@@ -56,12 +55,18 @@ services:
       - ./.env:/app/.env
       # Mount output directory to persist CSV exports
       - ./output:/app/output
+      # Mount logs directory for application logs
+      - ./logs:/app/logs
       # Mount zids.txt for easy updates without rebuilding
       - ./zids.txt:/app/zids.txt:ro
     networks:
       - zwift_network
-    # Uncomment to run as a scheduled job instead of one-time execution
-    # command: sh -c "while true; do python all_in_one.py && sleep 3600; done"
+    # Keep container running for cron-based execution
+    command: tail -f /dev/null
+    labels:
+      icon: "https://zwiftpower.com/favicon.ico"
+      description: "Zwift Power Racing Data Scraper"
+      name: "Zwift Scraper"
 
   # Optional: pgAdmin for database management
   pgadmin:
@@ -86,6 +91,7 @@ services:
 volumes:
   postgres_data:
     driver: local
+    name: zwift_postgres_data
   pgadmin_data:
     driver: local
 

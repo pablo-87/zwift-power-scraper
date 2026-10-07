@@ -1,0 +1,6 @@
+# Zwift Power Scraper - Daily execution at 3:00 AM
+# This cron job runs the Zwift scraper daily at 3:00 AM server time (America/Montevideo UTC-3)
+# Logs are written to /opt/zwift-scraper/logs/cron.log
+
+# Minute Hour Day Month DayOfWeek Command
+0 3 * * * /opt/zwift-scraper/scripts/run-scraper.sh >> /opt/zwift-scraper/logs/cron.log 2>&1

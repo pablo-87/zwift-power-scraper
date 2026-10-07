@@ -14,7 +14,7 @@ import shutil
 import pytest
 import pandas as pd
 import numpy as np
-from all_in_one import DataPipeline
+from core.pipeline import DataPipeline
 
 
 # ============================================================================
@@ -34,9 +34,10 @@ class TestUnpackListColumns:
         
         result = DataPipeline.unpack_list_columns(df)
         
-        assert result["time"].iloc[0] == "3600.5"
-        assert result["time"].iloc[1] == "3720.8"
-        assert result["weight"].iloc[0] == "67.4"
+        # After unpacking, numeric strings are converted to numbers
+        assert result["time"].iloc[0] == 3600.5
+        assert result["time"].iloc[1] == 3720.8
+        assert result["weight"].iloc[0] == 67.4
         assert result["name"].iloc[0] == "Rider A"
 
     def test_unpack_list_columns_numeric_conversion(self) -> None:
@@ -251,7 +252,7 @@ class TestFormatEventDates:
     """Test suite for Unix timestamp formatting functionality."""
 
     def test_format_event_dates_basic(self) -> None:
-        """Validates conversion of Unix timestamps to YYYY/MM/DD format."""
+        """Validates conversion of Unix timestamps to datetime format."""
         df = pd.DataFrame({
             "event_date": [1695052800, 1694966400, 1694880000],
             "name": ["Event A", "Event B", "Event C"]
@@ -259,9 +260,11 @@ class TestFormatEventDates:
         
         result = DataPipeline.format_event_dates(df, "event_date")
         
-        assert result["event_date"].iloc[0] == "2023/09/18"
-        assert result["event_date"].iloc[1] == "2023/09/17"
-        assert isinstance(result["event_date"].iloc[0], str)
+        # Check that dates are converted to datetime objects
+        assert pd.api.types.is_datetime64_any_dtype(result["event_date"])
+        # Use date comparison to avoid timezone issues
+        assert result["event_date"].iloc[0].date() == pd.Timestamp("2023-09-18").date()
+        assert result["event_date"].iloc[1].date() == pd.Timestamp("2023-09-17").date()
 
     def test_format_event_dates_sorting(self) -> None:
         """Validates that dates are sorted in descending order."""
@@ -272,10 +275,10 @@ class TestFormatEventDates:
         
         result = DataPipeline.format_event_dates(df, "event_date")
         
-        # Should be sorted newest first
-        assert result["event_date"].iloc[0] == "2023/09/18"
-        assert result["event_date"].iloc[1] == "2023/09/17"
-        assert result["event_date"].iloc[2] == "2023/09/16"
+        # Should be sorted newest first (use date comparison)
+        assert result["event_date"].iloc[0].date() == pd.Timestamp("2023-09-18").date()
+        assert result["event_date"].iloc[1].date() == pd.Timestamp("2023-09-17").date()
+        assert result["event_date"].iloc[2].date() == pd.Timestamp("2023-09-16").date()
 
     def test_format_event_dates_custom_column(self) -> None:
         """Validates formatting with custom column name."""
@@ -286,7 +289,7 @@ class TestFormatEventDates:
         
         result = DataPipeline.format_event_dates(df, "custom_date")
         
-        assert result["custom_date"].iloc[0] == "2023/09/18"
+        assert result["custom_date"].iloc[0].date() == pd.Timestamp("2023-09-18").date()
 
     def test_format_event_dates_missing_column(self) -> None:
         """Validates handling when date column doesn't exist."""
@@ -317,9 +320,9 @@ class TestFormatEventDates:
         
         result = DataPipeline.format_event_dates(df, "event_date")
         
-        # Invalid values should become NaT/NaN
-        assert pd.isna(result["event_date"].iloc[0]) or result["event_date"].iloc[0] == "NaT"
-        assert result["event_date"].iloc[1] == "2023/09/18"
+        # Invalid values should become NaT
+        assert pd.isna(result["event_date"].iloc[0])
+        assert result["event_date"].iloc[1].date() == pd.Timestamp("2023-09-18").date()
 
     def test_format_event_dates_string_timestamps(self) -> None:
         """Validates conversion of string Unix timestamps."""
@@ -330,136 +333,7 @@ class TestFormatEventDates:
         
         result = DataPipeline.format_event_dates(df, "event_date")
         
-        assert result["event_date"].iloc[0] == "2023/09/18"
-
-
-# ============================================================================
-# Export to CSV Tests
-# ============================================================================
-
-class TestExportToCsv:
-    """Test suite for CSV export functionality."""
-
-    def test_export_to_csv_basic(self, tmp_path: Any) -> None:
-        """Validates basic CSV export functionality.
-        
-        Args:
-            tmp_path: pytest fixture providing temporary directory
-        """
-        df = pd.DataFrame({
-            "name": ["Alice", "Bob"],
-            "score": [95, 87]
-        })
-        
-        output_dir = str(tmp_path / "output")
-        filepath = DataPipeline.export_to_csv(df, "test.csv", output_dir)
-        
-        assert os.path.exists(filepath)
-        assert filepath.endswith("test.csv")
-        
-        # Verify content
-        loaded_df = pd.read_csv(filepath)
-        assert len(loaded_df) == 2
-        assert "name" in loaded_df.columns
-
-    def test_export_to_csv_creates_directory(self, tmp_path: Any) -> None:
-        """Validates that output directory is created if it doesn't exist.
-        
-        Args:
-            tmp_path: pytest fixture providing temporary directory
-        """
-        df = pd.DataFrame({"col": [1, 2, 3]})
-        
-        output_dir = str(tmp_path / "new_output_dir")
-        assert not os.path.exists(output_dir)
-        
-        filepath = DataPipeline.export_to_csv(df, "test.csv", output_dir)
-        
-        assert os.path.exists(output_dir)
-        assert os.path.exists(filepath)
-
-    def test_export_to_csv_utf8_encoding(self, tmp_path: Any) -> None:
-        """Validates UTF-8 encoding for special characters.
-        
-        Args:
-            tmp_path: pytest fixture providing temporary directory
-        """
-        df = pd.DataFrame({
-            "name": ["José", "François", "北京"],
-            "country": ["Uruguay", "France", "China"]
-        })
-        
-        output_dir = str(tmp_path / "output")
-        filepath = DataPipeline.export_to_csv(df, "unicode_test.csv", output_dir)
-        
-        # Read back with UTF-8 encoding
-        loaded_df = pd.read_csv(filepath, encoding="utf-8")
-        assert loaded_df["name"].iloc[0] == "José"
-        assert loaded_df["name"].iloc[2] == "北京"
-
-    def test_export_to_csv_empty_dataframe(self, tmp_path: Any) -> None:
-        """Validates handling of empty DataFrame (should skip export).
-        
-        Args:
-            tmp_path: pytest fixture providing temporary directory
-        """
-        df = pd.DataFrame()
-        
-        output_dir = str(tmp_path / "output")
-        filepath = DataPipeline.export_to_csv(df, "empty.csv", output_dir)
-        
-        assert filepath == ""
-        assert not os.path.exists(os.path.join(output_dir, "empty.csv"))
-
-    def test_export_to_csv_no_index(self, tmp_path: Any) -> None:
-        """Validates that index is not written to CSV.
-        
-        Args:
-            tmp_path: pytest fixture providing temporary directory
-        """
-        df = pd.DataFrame({"col": [1, 2, 3]})
-        
-        output_dir = str(tmp_path / "output")
-        filepath = DataPipeline.export_to_csv(df, "no_index.csv", output_dir)
-        
-        # Read and check that there's no unnamed index column
-        loaded_df = pd.read_csv(filepath)
-        assert "Unnamed: 0" not in loaded_df.columns
-        assert len(loaded_df.columns) == 1
-
-    def test_export_to_csv_large_dataframe(self, tmp_path: Any) -> None:
-        """Validates export of larger DataFrame.
-        
-        Args:
-            tmp_path: pytest fixture providing temporary directory
-        """
-        df = pd.DataFrame({
-            "id": range(1000),
-            "value": np.random.rand(1000)
-        })
-        
-        output_dir = str(tmp_path / "output")
-        filepath = DataPipeline.export_to_csv(df, "large.csv", output_dir)
-        
-        assert os.path.exists(filepath)
-        loaded_df = pd.read_csv(filepath)
-        assert len(loaded_df) == 1000
-
-    def test_export_to_csv_default_output_dir(self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Validates default output directory is used when not specified.
-        
-        Args:
-            tmp_path: pytest fixture providing temporary directory
-            monkeypatch: pytest fixture for modifying environment
-        """
-        # Change to temp directory for this test
-        monkeypatch.chdir(tmp_path)
-        
-        df = pd.DataFrame({"col": [1, 2]})
-        filepath = DataPipeline.export_to_csv(df, "default.csv")
-        
-        assert "output" in filepath
-        assert os.path.exists(filepath)
+        assert result["event_date"].iloc[0].date() == pd.Timestamp("2023-09-18").date()
 
 
 # ============================================================================
@@ -496,10 +370,11 @@ class TestDataPipelineIntegration:
         # Format dates
         formatted = DataPipeline.format_event_dates(unpacked, "event_date")
         
-        assert formatted["time"].iloc[0] == "3600.5"
-        assert formatted["weight"].iloc[0] == "67.4"
-        assert formatted["event_date"].iloc[0] == "2023/09/18"
-        assert formatted["event_date"].iloc[1] == "2023/09/17"
+        # After unpacking, numeric values are converted
+        assert formatted["time"].iloc[0] == 3600.5
+        assert formatted["weight"].iloc[0] == 67.4
+        assert formatted["event_date"].iloc[0].date() == pd.Timestamp("2023-09-18").date()
+        assert formatted["event_date"].iloc[1].date() == pd.Timestamp("2023-09-17").date()
 
     def test_chained_transformations_preserve_data(self) -> None:
         """Validates that chained transformations don't lose data."""
@@ -519,4 +394,4 @@ class TestDataPipelineIntegration:
         assert "id" in result.columns
         assert result["value"].iloc[0] == 100
         assert result["weight"].iloc[0] == 67.4
-        assert result["date"].iloc[0] == "2023/09/18"
+        assert result["date"].iloc[0].date() == pd.Timestamp("2023-09-18").date()

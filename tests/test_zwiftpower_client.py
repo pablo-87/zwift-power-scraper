@@ -11,7 +11,7 @@ from typing import Any
 from unittest.mock import Mock, patch, MagicMock
 import pytest
 import pandas as pd
-from all_in_one import ZwiftPowerClient, CookieExpiredError
+from core.client import ZwiftPowerClient, CookieExpiredError
 
 
 # ============================================================================
@@ -27,7 +27,7 @@ class TestAuthentication:
         Args:
             mock_env_vars: Fixture providing mock environment variables
         """
-        with patch('all_in_one.requests.Session') as mock_session_class:
+        with patch('core.client.requests.Session') as mock_session_class:
             mock_session = MagicMock()
             mock_session_class.return_value = mock_session
             
@@ -48,7 +48,7 @@ class TestAuthentication:
         Args:
             mock_empty_env_vars: Fixture that clears environment variables
         """
-        with patch('all_in_one.requests.Session') as mock_session_class:
+        with patch('core.client.requests.Session') as mock_session_class:
             mock_session = MagicMock()
             mock_session_class.return_value = mock_session
             
@@ -66,11 +66,16 @@ class TestAuthentication:
         Args:
             monkeypatch: pytest fixture for modifying environment
         """
+        # Clear all cookie environment variables first
+        for key in ["PHPBB3_SID", "PHPBB3_U", "CLOUDFRONT_KEY_PAIR_ID",
+                    "CLOUDFRONT_POLICY", "CLOUDFRONT_SIGNATURE"]:
+            monkeypatch.delenv(key, raising=False)
+        
+        # Set only phpBB cookies
         monkeypatch.setenv("PHPBB3_SID", "test_sid")
         monkeypatch.setenv("PHPBB3_U", "test_u")
-        # CloudFront cookies intentionally missing
         
-        with patch('all_in_one.requests.Session') as mock_session_class:
+        with patch('core.client.requests.Session') as mock_session_class:
             mock_session = MagicMock()
             mock_session_class.return_value = mock_session
             
@@ -98,10 +103,10 @@ class TestProfileParsing:
         Args:
             mock_profile_html: Fixture providing complete mock HTML
         """
-        result = ZwiftPowerClient._parse_profile_html(mock_profile_html, "1714370")
+        result = ZwiftPowerClient._parse_profile_html(mock_profile_html, 1714370)
         
         # Verify basic fields
-        assert result["zid"] == "1714370"
+        assert result["zid"] == 1714370
         assert result["cat"] == "A"
         assert result["racing_score"] == "652.3"
         assert result["zpoints"] == "7,301"
@@ -127,9 +132,9 @@ class TestProfileParsing:
         Args:
             mock_profile_html_minimal: Fixture with minimal HTML
         """
-        result = ZwiftPowerClient._parse_profile_html(mock_profile_html_minimal, "1234567")
+        result = ZwiftPowerClient._parse_profile_html(mock_profile_html_minimal, 1234567)
         
-        assert result["zid"] == "1234567"
+        assert result["zid"] == 1234567
         assert result["cat"] == "B"
         assert result["country"] == "USA"
         
@@ -141,17 +146,17 @@ class TestProfileParsing:
 
     def test_parse_profile_html_empty(self) -> None:
         """Validates parser handles empty HTML without crashing."""
-        result = ZwiftPowerClient._parse_profile_html("", "9999999")
+        result = ZwiftPowerClient._parse_profile_html("", 9999999)
         
-        assert result["zid"] == "9999999"
+        assert result["zid"] == 9999999
         assert len(result) == 1  # Only zid should be present
 
     def test_parse_profile_html_malformed(self) -> None:
         """Validates parser handles malformed HTML gracefully."""
         malformed_html = "<html><body><table><tr><th>Category</body></html>"
-        result = ZwiftPowerClient._parse_profile_html(malformed_html, "8888888")
+        result = ZwiftPowerClient._parse_profile_html(malformed_html, 8888888)
         
-        assert result["zid"] == "8888888"
+        assert result["zid"] == 8888888
         # Should not crash, may have partial data
 
 
@@ -162,7 +167,7 @@ class TestProfileParsing:
 class TestGetProfiles:
     """Test suite for profile fetching functionality."""
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_get_profiles_success(
         self, 
         mock_session_class: Mock, 
@@ -193,7 +198,7 @@ class TestGetProfiles:
         assert "zid" in result.columns
         assert mock_session.get.call_count == 2
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_get_profiles_http_error(
         self, 
         mock_session_class: Mock,
@@ -218,9 +223,9 @@ class TestGetProfiles:
         
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 1
-        assert result.iloc[0]["zid"] == "1714370"
+        assert result.iloc[0]["zid"] == 1714370
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_get_profiles_exception(
         self, 
         mock_session_class: Mock,
@@ -243,10 +248,10 @@ class TestGetProfiles:
         
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 1
-        assert result.iloc[0]["zid"] == "1714370"
+        assert result.iloc[0]["zid"] == 1714370
 
-    @patch('all_in_one.requests.Session')
-    @patch('all_in_one.time.sleep')
+    @patch('core.client.requests.Session')
+    @patch('core.client.time.sleep')
     def test_get_profiles_rate_limiting(
         self, 
         mock_sleep: Mock,
@@ -285,7 +290,7 @@ class TestGetProfiles:
 class TestGetEventHistories:
     """Test suite for event history fetching functionality."""
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_get_event_histories_success(
         self, 
         mock_session_class: Mock,
@@ -315,7 +320,7 @@ class TestGetEventHistories:
         assert "query_zid" in result.columns
         assert all(result["query_zid"] == "1714370")
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_get_event_histories_empty(
         self, 
         mock_session_class: Mock,
@@ -343,7 +348,7 @@ class TestGetEventHistories:
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 0
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_get_event_histories_404(
         self, 
         mock_session_class: Mock,
@@ -368,7 +373,7 @@ class TestGetEventHistories:
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 0
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_get_event_histories_malformed_json(
         self, 
         mock_session_class: Mock,
@@ -394,7 +399,7 @@ class TestGetEventHistories:
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 0
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_get_event_histories_multiple_zids(
         self, 
         mock_session_class: Mock,
@@ -423,7 +428,7 @@ class TestGetEventHistories:
         assert len(result) == 4  # 2 events per ZID
         assert mock_session.get.call_count == 2
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_get_event_histories_headers(
         self, 
         mock_session_class: Mock,
@@ -464,7 +469,7 @@ class TestGetEventHistories:
 class TestSessionVerification:
     """Test suite for session verification functionality."""
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_verify_session_success(
         self, 
         mock_session_class: Mock,
@@ -487,7 +492,7 @@ class TestSessionVerification:
         # Should not raise exception
         client.verify_session()
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_verify_session_expired_cookies(
         self, 
         mock_session_class: Mock,
@@ -513,7 +518,7 @@ class TestSessionVerification:
         
         assert "obsolete" in str(exc_info.value).lower()
 
-    @patch('all_in_one.requests.Session')
+    @patch('core.client.requests.Session')
     def test_verify_session_unexpected_status(
         self, 
         mock_session_class: Mock,

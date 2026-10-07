@@ -13,14 +13,8 @@ import pandas as pd
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import IntegrityError
-from database import (
-    Base,
-    RiderProfile,
-    RiderEvent,
-    init_db,
-    psql_insert_do_nothing,
-    engine as production_engine
-)
+from database.engine import Base, init_db, psql_insert_do_nothing, engine as production_engine
+from database.models import RiderProfile, RiderEvent
 
 
 # ============================================================================

@@ -69,20 +69,22 @@ RUN useradd -m -u 1000 scraper && \
     chown -R scraper:scraper /app
 
 # Copy application code
-COPY --chown=scraper:scraper scraper.py .
-COPY --chown=scraper:scraper cookie_refresher.py .
-COPY --chown=scraper:scraper database.py .
+COPY --chown=scraper:scraper main.py .
+COPY --chown=scraper:scraper core/ ./core/
+COPY --chown=scraper:scraper database/ ./database/
+COPY --chown=scraper:scraper scripts/ ./scripts/
 COPY --chown=scraper:scraper zids.txt .
 
-# Create output directory
+# Create output and logs directories
 RUN mkdir -p /app/output && chown -R scraper:scraper /app/output
+RUN mkdir -p /app/logs && chown -R scraper:scraper /app/logs
 
 # Switch to non-root user
 USER scraper
 
 # Health check (optional - checks if Python can import main modules)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import scraper, cookie_refresher, database" || exit 1
+    CMD python -c "from core.client import ZwiftPowerClient; from database.engine import engine" || exit 1
 
 # Default command
-CMD ["python", "scraper.py"]
+CMD ["python", "main.py"]

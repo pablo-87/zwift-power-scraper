@@ -13,7 +13,8 @@ import pytest
 import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from database import Base, RiderProfile, RiderEvent
+from database.engine import Base
+from database.models import RiderProfile, RiderEvent
 
 
 # ============================================================================
@@ -492,7 +493,7 @@ def sample_rider_event() -> dict:
         "weight": 67.4,
         "avg_wkg": 4.08,
         "avg_power": 275,
-        "event_date": "2023/09/18",
+        "event_date": pd.Timestamp("2023-09-18"),
         "event_title": "Test Race",
         "distance": 42.5,
         "query_zid": 1714370
