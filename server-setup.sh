@@ -82,17 +82,20 @@ else
 fi
 
 ################################################################################
-# System Dependencies Installation
+# System Dependencies Installation & Official Docker Setup
 ################################################################################
+
+print_info "Purging any conflicting system Docker packages..."
+apt-get remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc || true
+apt-get purge -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc || true
+apt-get autoremove -y
 
 print_info "Updating package lists..."
 apt-get update || error_exit "Failed to update package lists"
 
-print_info "Installing system dependencies..."
+print_info "Installing core system dependencies..."
 PACKAGES=(
     "git"
-    "docker.io"
-    "docker-compose"
     "curl"
     "wget"
     "ca-certificates"
@@ -109,6 +112,34 @@ for package in "${PACKAGES[@]}"; do
         print_success "$package installed successfully"
     fi
 done
+
+################################################################################
+# Official Docker Repository & Engine Configuration
+################################################################################
+
+print_info "Setting up official Docker GPG key and repository..."
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+print_info "Installing official Docker Engine and Compose plugin..."
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || error_exit "Failed to install Docker packages"
+
+print_info "Configuring Docker service..."
+
+# Enable and start Docker service
+systemctl enable docker || error_exit "Failed to enable Docker service"
+systemctl start docker || error_exit "Failed to start Docker service"
+
+# Verify Docker installation
+docker --version || error_exit "Docker installation verification failed"
+docker compose version || error_exit "Docker Compose plugin verification failed"
 
 ################################################################################
 # Docker Configuration
