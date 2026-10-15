@@ -55,7 +55,7 @@ The fastest way to deploy the application is using the automated setup script.
 
 ```bash
 cd /opt
-sudo git clone https://github.com/YOUR_USERNAME/zwift-power-scraper.git zwift-scraper
+sudo git clone https://github.com/pablo-87/zwift-power-scraper.git zwift-scraper
 cd zwift-scraper
 ```
 
