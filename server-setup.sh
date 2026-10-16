@@ -101,6 +101,7 @@ PACKAGES=(
     "ca-certificates"
     "gnupg"
     "lsb-release"
+    "cron"
 )
 
 for package in "${PACKAGES[@]}"; do
@@ -129,7 +130,7 @@ echo \
 
 print_info "Installing official Docker Engine and Compose plugin..."
 apt-get update
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || error_exit "Failed to install Docker packages"
+apt-get install -y --allow-change-held-packages docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || error_exit "Failed to install Docker packages"
 
 print_info "Configuring Docker service..."
 

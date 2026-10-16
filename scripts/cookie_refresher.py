@@ -8,6 +8,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger("CookieRefresher")
 
+def update_env_file(file_path, key_to_set, value_to_set):
+    """Updates an environment variable directly in-place without atomic renames,
+    bypassing Docker file-mount locks."""
+    lines = []
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    
+    key_found = False
+    new_lines = []
+    for line in lines:
+        # Match lines starting with the key (ignoring comments/whitespace if needed)
+        if line.strip().startswith(f"{key_to_set}="):
+            new_lines.append(f"{key_to_set}={value_to_set}\n")
+            key_found = True
+        else:
+            new_lines.append(line)
+    
+    # If the key didn't exist in the file yet, append it
+    if not key_found:
+        if new_lines and not new_lines[-1].endswith("\n"):
+            new_lines.append("\n")
+        new_lines.append(f"{key_to_set}={value_to_set}\n")
+        
+    # Write back directly to the existing file descriptor
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+
 def refresh_zwiftpower_cookies(env_path: str = ".env") -> bool:
     load_dotenv(env_path, override=True)
     username = os.getenv("ZWIFT_USER")
@@ -97,7 +125,7 @@ def refresh_zwiftpower_cookies(env_path: str = ".env") -> bool:
             for env_var, cookie_name in required_keys.items():
                 val = cookie_map.get(cookie_name)
                 if val:
-                    set_key(env_path, env_var, val)
+                    update_env_file(env_path, env_var, val)
                     updated_count += 1
                 else:
                     logger.warning(f"Expected cookie '{cookie_name}' was not found in browser context.")

@@ -49,8 +49,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright browsers (Chromium only for cookie refresh)
-RUN playwright install chromium && \
-    playwright install-deps chromium
+RUN python -m playwright install chromium
 
 # Stage 3: Final production image
 FROM base as production
