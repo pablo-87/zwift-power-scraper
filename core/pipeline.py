@@ -23,7 +23,7 @@ class DataPipeline:
                         x[0] if isinstance(x, (list, tuple)) and len(x) > 0 else x
                     )
                 )
-                df_clean[col] = pd.to_numeric(df_clean[col], errors="ignore")
+                df_clean[col] = pd.to_numeric(df_clean[col], errors="coerce")
 
         return df_clean
 
